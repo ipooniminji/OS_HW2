@@ -1,0 +1,35 @@
+name: CI/CD Pipeline - Docker push
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    # 프로젝트 환경에 따라 브랜치 이름을 확인하세요.
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 저장소 코드 불러오기 (Checkout)
+        uses: actions/checkout@v4
+
+      - name: Docker Buildx 설정 (멀티 플랫폼 빌드 및 캐싱 등 향상된 빌드)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker Hub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker 이미지 빌드 및 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # 사용자의 Docker Hub 아이디에 기반하여 태그명 지정 (latest 태그)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/spam-classifier:latest
+          # 빌드 속도 개선을 위한 레이어 캐시
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
