@@ -4,29 +4,31 @@ from pydantic import BaseModel
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import make_pipeline
+from typing import List
 import logging
 
 # 로거 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("SpamGuard")
 
 # FastAPI 앱 초기화
 app = FastAPI(
-    title="안심 문자 분류기 API",
-    description="스팸 및 스미싱(Smishing) 문자를 진단하는 심플한 UI의 분류기입니다.",
-    version="4.0.0"
+    title="안심 문자 분류기 API (MLOps 고도화 버전)",
+    description="스미싱 진단 및 Explainable AI(xAI) 스팸 키워드 근거 추출 엔진 추가",
+    version="5.0.0"
 )
 
 # 예측 요청 데이터 모델
 class PredictRequest(BaseModel):
     text: str
 
-# 예측 응답 데이터 모델
+# 예측 응답 데이터 모델 (keywords 추가)
 class PredictResponse(BaseModel):
     label: str
     probability: dict
     message: str
     confidence_level: str
+    keywords: List[str] = []
 
 # 데이터셋 보강 (사칭, 미기입, 반송 등 스미싱 패턴 집중 추가)
 TRAINING_DATA = [
@@ -49,7 +51,7 @@ TRAINING_DATA = [
     ("로또 1등 조합기 무료 다운로드. 100% 당첨 보장 및 즉시 환전", "spam"),
     ("스포츠 토토 회원가입 이벤트! 첫 충전시 30% 추가 포인트 당첨 찬스", "spam"),
     
-    # 🚨 **중요 스미싱 패턴 추가** 🚨
+    # 🚨 **중요 스미싱 패턴** 🚨
     ("우체국택배 배송 기사입니다. 상세주소 미기입으로 반송된 택배가 있어 주소 회신 바랍니다.", "spam"),
     ("CJ대한통운: 배송 불가 (주소 불일치). 카톡으로 주소지 다시 남겨주세요.", "spam"),
     ("택배 배송정보가 잘못되었습니다. 즉시 카톡으로 올바른 주소 회신바랍니다.", "spam"),
@@ -83,21 +85,39 @@ TRAINING_DATA = [
     ("네트워크 정기 점검으로 인해 10분간 사내 VPN 접속이 일시 끊어질 수 있습니다.", "ham")
 ]
 
+# 위험 주의 키워드 사전 (Explainability 용도)
+DANGEROUS_KEYWORDS = [
+    "대출", "정부지원금", "마감 임박", "[광고]", "광고", "(주)", 
+    "상한가", "리딩방", "선취매", "수익 보장", "급등주",
+    "포인트", "환전", "로또", "1등", "조합기", "바카라", "슬롯",
+    "미기입", "반송", "주소 회신", "주소 불일치", "어플 설치", "apk",
+    "대포통장", "검찰청", "소비자원", "해외결제", "미납", "환불처리"
+]
+
+def extract_suspicious_keywords(text: str) -> List[str]:
+    """텍스트 내 포함된 위험 키워드를 추출합니다."""
+    found = []
+    # 단순 문자열 비교. 조금 더 고도화하려면 regex 활용 가능.
+    for kw in DANGEROUS_KEYWORDS:
+        if kw in text:
+            found.append(kw)
+    return found
+
 # TfidfVectorizer 설정
 advanced_vectorizer = TfidfVectorizer(
     token_pattern=r"[^\s]+", 
-    ngram_range=(1, 3) # ngram을 3까지 늘려 '상세주소 미기입으로 반송된', '주소 회신 바랍니다 '같은 긴 맥락을 더 잘 잡도록 세팅
+    ngram_range=(1, 3)
 )
 
 model_pipeline = make_pipeline(advanced_vectorizer, MultinomialNB())
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("분류기 AI 모델 학습 시작...")
+    logger.info("분류기 AI 모델 및 키워드 추출기 학습 시작...")
     X_train = [text for text, label in TRAINING_DATA]
     y_train = [label for text, label in TRAINING_DATA]
     model_pipeline.fit(X_train, y_train)
-    logger.info("모델 학습 완료. 서비스가 준비되었습니다.")
+    logger.info("모델 학습 완료. 운영 서비스 준비 완료.")
 
 
 HTML_TEMPLATE = """
@@ -118,7 +138,6 @@ HTML_TEMPLATE = """
         }
 
         body {
-            /* 심플하고 모던한 배경 */
             background-color: #f3f4f6;
             color: #1f2937;
             min-height: 100vh;
@@ -129,12 +148,11 @@ HTML_TEMPLATE = """
         }
 
         .container {
-            /* 깔끔한 화이트톤 폼 박스 */
             background: #ffffff;
             border-radius: 12px;
             padding: 40px;
             width: 100%;
-            max-width: 540px;
+            max-width: 580px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
 
@@ -182,7 +200,6 @@ HTML_TEMPLATE = """
         }
 
         button {
-            /* 심플한 단일 컬러 (블루) 버튼 */
             background-color: #2563eb;
             color: white;
             border: none;
@@ -202,10 +219,6 @@ HTML_TEMPLATE = """
             background-color: #1d4ed8;
         }
 
-        button:active {
-            background-color: #1e40af;
-        }
-        
         button:disabled {
             background-color: #9ca3af;
             cursor: not-allowed;
@@ -213,7 +226,7 @@ HTML_TEMPLATE = """
 
         #result-card {
             margin-top: 24px;
-            padding: 20px;
+            padding: 24px;
             border-radius: 8px;
             display: none;
             text-align: center;
@@ -244,7 +257,7 @@ HTML_TEMPLATE = """
         }
         
         .result-icon {
-            font-size: 32px;
+            font-size: 36px;
             margin-bottom: 8px;
         }
         
@@ -258,6 +271,37 @@ HTML_TEMPLATE = """
             font-size: 14px;
             margin-bottom: 16px;
             opacity: 0.9;
+        }
+
+        /* 위험 키워드 시각화 CSS */
+        .result-keywords {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background-color: rgba(255, 255, 255, 0.4);
+            border-radius: 8px;
+        }
+
+        .kw-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        .keyword-badge {
+            background-color: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
         .probability {
@@ -296,9 +340,9 @@ HTML_TEMPLATE = """
         <p class="subtitle">스미싱 및 스팸 문자를 로컬 환경에서 감지합니다.</p>
         
         <div class="input-group">
-            <textarea id="message-input" placeholder="분석할 문자 내용을 입력하세요."></textarea>
+            <textarea id="message-input" placeholder="스팸일지 모르는 문장, 안전하게 텍스트를 기입해서 먼저 검사해보세요."></textarea>
             <button id="inspect-btn" onclick="analyzeText()">
-                <span id="btn-text">텍스트 검증</span>
+                <span id="btn-text">안심 텍스트 검증</span>
                 <div id="btn-spinner" class="spinner"></div>
             </button>
         </div>
@@ -307,6 +351,8 @@ HTML_TEMPLATE = """
             <div id="result-icon" class="result-icon"></div>
             <div id="result-title" class="result-title"></div>
             <div id="result-desc" class="result-desc"></div>
+            <!-- 키워드 박스 추가 -->
+            <div id="result-keywords" class="result-keywords"></div>
             <div id="result-prob" class="probability"></div>
         </div>
     </div>
@@ -318,6 +364,7 @@ HTML_TEMPLATE = """
             const btnText = document.getElementById('btn-text');
             const btnSpinner = document.getElementById('btn-spinner');
             const resultCard = document.getElementById('result-card');
+            const kwCard = document.getElementById('result-keywords');
             
             const text = inputEl.value.trim();
             if (!text) return;
@@ -326,6 +373,8 @@ HTML_TEMPLATE = """
             btnText.style.display = 'none';
             btnSpinner.style.display = 'block';
             resultCard.classList.remove('show');
+            kwCard.innerHTML = ''; // 키워드 초기화
+            kwCard.style.display = 'none';
             
             try {
                 const response = await fetch('/predict', {
@@ -356,10 +405,26 @@ HTML_TEMPLATE = """
             const titleEl = document.getElementById('result-title');
             const descEl = document.getElementById('result-desc');
             const probEl = document.getElementById('result-prob');
+            const kwCard = document.getElementById('result-keywords');
             
             resultCard.className = '';
-            
             const label = data.label;
+            
+            // 위험 키워드가 전송되어 왔다면 그려주기 (보류 또는 스팸 상태)
+            if (data.keywords && data.keywords.length > 0) {
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'kw-label';
+                titleSpan.innerText = '검출된 위험 키워드 :';
+                kwCard.appendChild(titleSpan);
+                
+                data.keywords.forEach(kw => {
+                    const badge = document.createElement('span');
+                    badge.className = 'keyword-badge';
+                    badge.innerText = kw;
+                    kwCard.appendChild(badge);
+                });
+                kwCard.style.display = 'flex';
+            }
             
             if (label === 'uncertain') {
                 resultCard.classList.add('result-uncertain');
@@ -418,7 +483,8 @@ def predict_spam(request: PredictRequest):
     }
     
     max_prob = max(prob_dict.values())
-    
+    found_keywords = []
+
     if prediction == "spam" and max_prob < 0.60:
         final_label = "uncertain"
         confidence_level = "보류"
@@ -435,9 +501,22 @@ def predict_spam(request: PredictRequest):
         else:
             message = "위험 요소가 발견되지 않았습니다."
             
+    # xAI (Explainability) 로직
+    # 만약 스팸으로 의심되거나 확정된 경우 무슨 키워드 때문인지 추출하여 반환 및 로깅
+    if final_label in ["spam", "uncertain"]:
+        found_keywords = extract_suspicious_keywords(text)
+        short_text = text.replace('\n', ' ')[:30] + '...'
+        if found_keywords:
+            logger.warning(f"[Spam Guard ALERT] 분류: {final_label} | 확률: {max_prob*100:.1f}% | 적발된 키워드: {found_keywords} | 원문: {short_text}")
+        else:
+            logger.info(f"[Spam Guard INFO] 분류: {final_label} | 확률: {max_prob*100:.1f}% | 위험 키워드는 없으나 AI 패턴으로 의심됨 | 원문: {short_text}")
+    else:
+        logger.info(f"[Spam Guard SAFE] 정상 분류 (Ham) | 원문: {text.replace('\n', ' ')[:30]}...")
+
     return PredictResponse(
         label=final_label,
         probability=prob_dict,
         message=message,
-        confidence_level=confidence_level
+        confidence_level=confidence_level,
+        keywords=found_keywords
     )
