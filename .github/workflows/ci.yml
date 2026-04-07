@@ -5,7 +5,6 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  # 1. 빌드 및 Docker Hub 푸시 파이프라인 (클라우드 러너 사용)
   build-and-push:
     runs-on: ubuntu-latest
     
@@ -19,8 +18,8 @@ jobs:
       - name: Docker Hub 로그인
         uses: docker/login-action@v3
         with:
-          # 도커 허브 로그인에는 همچنان 보안을 위해 Secrets 계정 정보를 사용합니다.
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # 여기서 변수 대신 실제 아이디를 직접 써서 오류를 차단합니다!
+          username: dzhb2342
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Docker 이미지 빌드 및 푸시
@@ -29,34 +28,28 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          # 사용자님의 명시적 아이디 'ipooniminji' 적용
-          tags: ipooniminji/spam-classifier:latest
+          # 로그인 아이디(dzhb2342)와 이미지 경로를 일치시켜야 권한 에러가 안 납니다.
+          tags: dzhb2342/spam-classifier:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # 2. 로컬 서버 배포 파이프라인 (내 컴퓨터 Self-hosted 러너 사용)
   deploy:
-    # 반드시 빌드(build-and-push)가 성공적으로 끝난 뒤에 실행되도록 종속성(needs) 설정
     needs: build-and-push
-    
-    # 내 컴퓨터(로컬)의 Self-hosted Runner 위에서 작동하도록 지시
     runs-on: self-hosted
     
     steps:
       - name: 방금 빌드된 최신 이미지 가져오기 (Pull)
-        run: docker pull ipooniminji/spam-classifier:latest
+        run: docker pull dzhb2342/spam-classifier:latest
 
       - name: 기존 'spam-guard' 컨테이너 중지 및 삭제
-        # 기존에 컨테이너가 없어서 에러가 발생해도 파이프라인이 멈추지 않도록 '|| true' 처리
         run: |
           docker stop spam-guard || true
           docker rm spam-guard || true
 
       - name: 새로운 'spam-guard' 컨테이너 구동
-        # 백그라운드(-d)로 실행하며, 포트 매핑(-p), 재부팅 시 자동시작(--restart) 적용
         run: |
           docker run -d \
             --name spam-guard \
             -p 8000:8000 \
             --restart unless-stopped \
-            ipooniminji/spam-classifier:latest
+            dzhb2342/spam-classifier:latest
