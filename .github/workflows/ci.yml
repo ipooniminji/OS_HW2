@@ -1,10 +1,11 @@
-name: CI/CD Pipeline (Build & Deploy)
+name: CI/CD Pipeline (Build Only)
 
 on:
   push:
     branches: [ "main", "master" ]
 
 jobs:
+  # 빌드만 하고 끝내는 스마트한 방식!
   build-and-push:
     runs-on: ubuntu-latest
     
@@ -18,7 +19,6 @@ jobs:
       - name: Docker Hub 로그인
         uses: docker/login-action@v3
         with:
-          # 여기서 변수 대신 실제 아이디를 직접 써서 오류를 차단합니다!
           username: dzhb2342
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
@@ -28,28 +28,4 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          # 로그인 아이디(dzhb2342)와 이미지 경로를 일치시켜야 권한 에러가 안 납니다.
           tags: dzhb2342/spam-classifier:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    needs: build-and-push
-    runs-on: self-hosted
-    
-    steps:
-      - name: 방금 빌드된 최신 이미지 가져오기 (Pull)
-        run: docker pull dzhb2342/spam-classifier:latest
-
-      - name: 기존 'spam-guard' 컨테이너 중지 및 삭제
-        run: |
-          docker stop spam-guard || true
-          docker rm spam-guard || true
-
-      - name: 새로운 'spam-guard' 컨테이너 구동
-        run: |
-          docker run -d \
-            --name spam-guard \
-            -p 8000:8000 \
-            --restart unless-stopped \
-            dzhb2342/spam-classifier:latest
